@@ -108,7 +108,7 @@ mod tests {
         assert!(parse("sk_test_tooshort").is_none());
         assert!(parse("pk_live_demofull000000000000000000000001").is_none());
         // Right length, wrong charset - would otherwise reach the database.
-        assert!(parse("sk_test_demofull0000000000000000000000-1").is_none());
+        assert!(parse("sk_prod_demofull0000000000000000000000-1").is_none());
     }
 
     #[test]
@@ -117,15 +117,15 @@ mod tests {
         // two ever disagree, `docker compose up` produces keys that cannot log
         // in - so pin one of them here.
         assert_eq!(
-            hash_key("sk_test_demofull000000000000000000000001"),
-            hash_key("sk_test_demofull000000000000000000000001")
+            hash_key("sk_prod_demofull000000000000000000000001"),
+            hash_key("sk_prod_demofull000000000000000000000001")
         );
         assert_eq!(
-            parse("sk_test_demofull000000000000000000000001"),
+            parse("sk_prod_demofull000000000000000000000001"),
             Some("demofull")
         );
         assert_eq!(
-            parse("sk_test_democoll000000000000000000000003"),
+            parse("sk_prod_democoll000000000000000000000003"),
             Some("democoll")
         );
     }
