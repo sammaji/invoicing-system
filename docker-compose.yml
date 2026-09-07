@@ -1,0 +1,75 @@
+name: invoicing
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      # The migration role owns the schema and is what `sqlx migrate run`
+      # connects as. It is the cluster superuser here so that the seed
+      # migration can write before RLS is applied; in production the migrator
+      # would be an ordinary owner and seeding would go through a bootstrap
+      # path. See DESIGN.md.
+      POSTGRES_USER: migrator
+      POSTGRES_PASSWORD: migrator_dev_password
+      POSTGRES_DB: invoicing
+    ports:
+      # Non-default host port so this does not collide with a Postgres you are
+      # already running.
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U migrator -d invoicing"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  mock-psp:
+    build:
+      context: .
+      target: mock-psp
+    environment:
+      BIND_ADDR: 0.0.0.0:9090
+      RUST_LOG: info
+    ports:
+      - "59090:9090"
+
+  api:
+    build:
+      context: .
+      target: api
+    depends_on:
+      db:
+        condition: service_healthy
+      mock-psp:
+        condition: service_started
+    environment:
+      # Two connection strings, deliberately. The serving role cannot alter
+      # schema; the migrating role is not used to serve traffic.
+      DATABASE_URL: postgres://invoice_app:invoice_app_dev_password@db:5432/invoicing
+      MIGRATOR_DATABASE_URL: postgres://migrator:migrator_dev_password@db:5432/invoicing
+      BIND_ADDR: 0.0.0.0:8080
+
+      JWT_SECRET: dev-only-insecure-jwt-secret-change-me
+      JWT_TTL_SECONDS: "900"
+
+      PSP_ALPHAPAY_URL: http://mock-psp:9090/alphapay
+      PSP_BETAPAY_URL: http://mock-psp:9090/betapay
+      DEFAULT_PROCESSOR: alphapay
+      # Well under any sane client timeout: an unknown outcome is a decision we
+      # make quickly and then reconcile, not something a caller waits for.
+      PSP_TIMEOUT_MS: "5000"
+
+      RECONCILER_INTERVAL_MS: "10000"
+      RECONCILER_STALE_AFTER_MS: "60000"
+      RECONCILER_MAX_ATTEMPTS: "5"
+
+      WEBHOOK_POLL_INTERVAL_MS: "1000"
+      WEBHOOK_DELIVERY_TIMEOUT_MS: "10000"
+
+      RUST_LOG: info,tower_http=warn,sqlx=warn
+    ports:
+      - "58080:8080"
+
+volumes:
+  db_data:
